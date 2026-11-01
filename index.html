@@ -1,0 +1,1734 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>السبورة PDF</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root { --bg:#0b1120; --panel:#111a2e; --text:#e2e8f0; --accent:#38bdf8; --line:rgba(255,255,255,0.12); }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family: system-ui, Tahoma, 'Segoe UI', sans-serif; overflow:hidden; user-select:none; -webkit-user-select:none; }
+button { font:inherit; color:inherit; }
+input[type=range] { accent-color: var(--accent); }
+.hidden { display:none !important; }
+svg.ico { width:20px; height:20px; }
+
+/* المكتبة */
+#library { position:fixed; inset:0; padding: calc(18px + env(safe-area-inset-top,0px)) 16px 16px; overflow:auto; }
+.lib-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+.lib-head h1 { font-size:22px; margin:0; }
+.add-btn.alt { background:#a78bfa; color:#0b1120; }
+.tpl-card { background:rgba(255,255,255,0.05); border:1px solid var(--line); border-radius:12px; padding:8px 6px; cursor:pointer; text-align:center; color:inherit; }
+.tpl-card canvas { width:100%; height:auto; aspect-ratio:120/170; display:block; background:#fff; border-radius:8px; }
+.tpl-card span { display:block; font-size:12px; margin-top:6px; }
+.tpl-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.add-btn { background:var(--accent); color:#0b1120; border:0; border-radius:14px; padding:11px 16px; font-weight:800; cursor:pointer; }
+.lib-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap:14px; }
+.lib-card { position:relative; background:rgba(255,255,255,0.05); border:1px solid var(--line); border-radius:16px; padding:22px 12px 16px; text-align:center; cursor:pointer; }
+.lib-card .lib-ico svg { width:46px; height:46px; color:var(--accent); }
+.lib-name { margin-top:10px; font-weight:700; word-break:break-word; font-size:14px; }
+.lib-del { position:absolute; top:6px; left:6px; width:28px; height:28px; border-radius:50%; border:0; background:rgba(15,23,42,0.8); cursor:pointer; display:grid; place-items:center; }
+.lib-del svg { width:14px; height:14px; }
+.lib-empty { text-align:center; opacity:0.7; margin-top:60px; line-height:1.9; }
+
+/* المشاهد */
+#viewer { position:fixed; inset:0; background:#1f2937; }
+#stage { position:fixed; inset:0; overflow:hidden; touch-action:none; }
+#page { position:absolute; left:0; top:0; transform-origin:0 0; background:#fff; box-shadow:0 10px 32px rgba(0,0,0,0.45); }
+#page canvas { position:absolute; left:0; top:0; width:100%; height:100%; display:block; }
+#pdfc { z-index:1; }
+#hlc { z-index:2; mix-blend-mode:multiply; }
+#annc { z-index:3; }
+
+/* أزرار عايمة */
+.fbtn { position:fixed; z-index:30; width:46px; height:46px; border-radius:50%; border:1px solid var(--line); background:rgba(15,23,42,0.78); backdrop-filter:blur(12px); display:grid; place-items:center; cursor:pointer; }
+#close-btn { top:calc(12px + env(safe-area-inset-top,0px)); left:12px; }
+#toggle-btn { top:calc(12px + env(safe-area-inset-top,0px)); right:12px; }
+.nav-btn { position:fixed; z-index:30; top:50%; transform:translateY(-50%); width:52px; height:52px; border-radius:50%; border:1px solid var(--line); background:rgba(15,23,42,0.7); backdrop-filter:blur(12px); display:grid; place-items:center; cursor:pointer; }
+#nav-prev { right:12px; }
+#nav-next { left:12px; }
+.nav-btn:disabled { opacity:0.3; }
+
+/* شريط الأدوات العايم */
+#toolbar { position:fixed; z-index:25; bottom:calc(14px + env(safe-area-inset-bottom,0px)); left:50%; transform:translateX(-50%); width:max-content; max-width:calc(100% - 24px); display:flex; align-items:center; gap:6px; padding:8px 12px; border-radius:999px; background:rgba(15,23,42,0.85); backdrop-filter:blur(16px); border:1px solid var(--line); overflow-x:auto; scrollbar-width:none; box-shadow:0 12px 30px rgba(0,0,0,0.35); }
+#toolbar::-webkit-scrollbar { display:none; }
+.tb-btn { width:42px; height:42px; flex:none; border-radius:50%; border:0; background:rgba(255,255,255,0.08); display:grid; place-items:center; cursor:pointer; }
+.tb-btn.on { background:var(--accent); color:#0b1120; }
+.tb-btn:disabled { opacity:0.35; }
+.tb-text { flex:none; height:42px; padding:0 12px; border-radius:21px; border:0; background:rgba(255,255,255,0.08); cursor:pointer; font-weight:700; font-size:13px; white-space:nowrap; }
+.tb-text.on { background:var(--accent); color:#0b1120; }
+.tb-sep { flex:none; width:1px; height:28px; background:rgba(255,255,255,0.15); }
+.tb-page { flex:none; font-size:13px; font-weight:700; padding:0 6px; white-space:nowrap; }
+#color-dot { width:24px; height:24px; border-radius:8px; border:2px solid #fff; display:block; }
+#tb-size { width:90px; flex:none; }
+#toolbar.bar-hidden { display:none; }
+/* شكل الشريط زي الصورة: داكن ومدور */
+#toolbar { background:#1d212c; border:1px solid rgba(255,255,255,0.08); box-shadow:0 14px 34px rgba(0,0,0,0.45); padding:8px 14px; gap:6px; }
+#tb-color, #tb-size { display:none !important; }
+.qslots { gap:4px; }
+.qslot { width:46px; height:56px; border-radius:12px; background:transparent; border:2px solid transparent; transition:transform .15s, background .15s; }
+.qslot svg { width:30px; height:46px; filter:drop-shadow(0 2px 2px rgba(0,0,0,0.5)); }
+.qslot.on { background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.35); transform:translateY(-3px); }
+.colorgrid { display:grid; grid-template-columns:repeat(5, 22px); gap:5px; flex:none; padding:2px 6px; }
+.cg { width:22px; height:22px; border-radius:7px; border:2px solid rgba(255,255,255,0.12); cursor:pointer; padding:0; box-shadow:inset 0 1px 2px rgba(255,255,255,0.4), 0 2px 4px rgba(0,0,0,0.35); }
+.cg.on { border-color:#fff; transform:scale(1.1); }
+.sizes { display:flex; align-items:center; gap:4px; flex:none; }
+.szd { width:30px; height:30px; border-radius:50%; border:0; background:transparent; display:grid; place-items:center; cursor:pointer; padding:0; }
+.szd span { display:block; border-radius:50%; background:#cbd5e1; }
+.szd.on { background:rgba(255,255,255,0.12); }
+.szd.on span { background:#ffffff; }
+#toolbar.vert .colorgrid { grid-template-columns:repeat(2, 22px); }
+#toolbar.vert .sizes { flex-direction:column; }
+/* الوضع الرأسي على الجنب زي Notein */
+#toolbar.vert { left:10px; top:50%; bottom:auto; transform:translateY(-50%); width:auto; max-width:none; max-height:calc(100% - 110px); flex-direction:column; border-radius:30px; padding:10px 8px; overflow-y:auto; overflow-x:hidden; }
+#toolbar.vert .tb-sep { width:28px; height:1px; }
+#toolbar.vert .qslots { flex-direction:column; }
+#toolbar.vert #tb-size { width:110px; height:24px; transform:rotate(-90deg); margin:40px -36px; }
+body.vert #nav-next { left:84px; }
+body.vert #nav-prev { right:12px; }
+
+/* نوافذ */
+.modal { position:fixed; inset:0; z-index:100; background:rgba(0,0,0,0.5); display:none; align-items:center; justify-content:center; padding:16px; }
+.modal.open { display:flex; }
+.modal-box { background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:18px; width:min(480px,94vw); max-height:86vh; overflow:auto; }
+.modal-box h2 { margin:0 0 14px; font-size:18px; }
+.modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; flex-wrap:wrap; }
+.dbtn { border:0; border-radius:12px; padding:10px 16px; font-weight:700; cursor:pointer; background:rgba(255,255,255,0.1); }
+.dbtn.primary { background:var(--accent); color:#0b1120; }
+.dbtn.danger { background:#dc2626; color:#fff; }
+.pens-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.pen-card { background:rgba(255,255,255,0.05); border:1px solid var(--line); border-radius:12px; padding:8px 6px; cursor:pointer; text-align:center; }
+.pen-card.on { border-color:var(--accent); box-shadow:0 0 0 2px rgba(56,189,248,0.4); }
+.pen-card canvas { width:100%; height:44px; display:block; background:#fff; border-radius:8px; }
+.pen-card span { display:block; font-size:12px; margin-top:6px; }
+.pal-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
+.pal-sw { aspect-ratio:1; border-radius:12px; border:2px solid rgba(255,255,255,0.3); cursor:pointer; }
+.pal-sw.on { border-color:#fff; box-shadow:0 0 0 2px var(--accent); }
+.pal-custom { display:flex; align-items:center; justify-content:space-between; margin-top:16px; font-weight:700; }
+.pal-custom input { width:64px; height:42px; border:0; background:none; cursor:pointer; }
+
+.qslots { display:flex; gap:6px; align-items:center; flex:none; }
+.qslot { width:50px; height:42px; border-radius:14px; border:2px solid transparent; background:rgba(255,255,255,0.08); display:grid; place-items:center; padding:0; cursor:pointer; flex:none; touch-action:manipulation; }
+.qslot.on { border-color:var(--accent); background:rgba(56,189,248,0.2); }
+.qslot canvas { width:40px; height:22px; display:block; }
+.shape-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.shape-sw { aspect-ratio:1; border-radius:14px; border:1px solid var(--line); background:rgba(255,255,255,0.06); color:var(--text); cursor:pointer; padding:12px; display:grid; place-items:center; }
+.shape-sw svg { width:100%; height:100%; }
+#toast { position:fixed; z-index:200; left:50%; bottom:96px; transform:translateX(-50%); background:rgba(0,0,0,0.85); padding:10px 16px; border-radius:12px; opacity:0; transition:opacity .2s; pointer-events:none; font-size:14px; }
+#toast.show { opacity:1; }
+</style>
+</head>
+<body>
+
+<!-- المكتبة -->
+<div id="library">
+    <div class="lib-head">
+        <h1>السبورة PDF</h1>
+        <div style="display:flex;gap:8px"><button class="add-btn alt" id="add-nb">+ دفتر جديد</button><button class="add-btn" id="add-btn">+ إضافة PDF</button></div>
+    </div>
+    <div class="lib-grid" id="lib-grid"></div>
+    <div class="lib-empty hidden" id="lib-empty">لا توجد ملفات بعد.<br>اضغط "إضافة PDF" واختار ملف.</div>
+</div>
+
+<!-- المشاهد -->
+<div id="viewer" class="hidden">
+    <div id="stage">
+        <div id="page">
+            <canvas id="pdfc"></canvas>
+            <canvas id="hlc"></canvas>
+            <canvas id="annc"></canvas>
+        </div>
+    </div>
+
+    <button class="fbtn" id="close-btn" title="إغلاق" data-ico="x"></button>
+    <button class="fbtn" id="toggle-btn" title="إخفاء أو إظهار الأدوات"><span data-ico="eye"></span></button>
+    <button class="nav-btn" id="nav-prev" title="الصفحة السابقة" data-ico="chevR"></button>
+    <button class="nav-btn" id="nav-next" title="الصفحة التالية" data-ico="chevL"></button>
+
+    <div id="toolbar">
+        <button class="tb-btn" id="tb-undo" title="تراجع" data-ico="undo"></button>
+        <button class="tb-btn" id="tb-redo" title="إعادة" data-ico="redo"></button>
+        <span class="tb-sep"></span>
+        <div class="qslots" id="qslots"></div>
+        <div class="colorgrid" id="colorgrid"></div>
+        <div class="sizes">
+            <button class="szd" data-s="3" title="خط رفيع"><span style="width:4px;height:4px"></span></button>
+            <button class="szd" data-s="6" title="خط متوسط"><span style="width:8px;height:8px"></span></button>
+            <button class="szd" data-s="12" title="خط عريض"><span style="width:14px;height:14px"></span></button>
+        </div>
+        <span class="tb-sep"></span>
+        <button class="tb-text" id="tb-pen" title="كل الأقلام"><span id="tb-penname">قلم حبر</span></button>
+        <button class="tb-btn" id="tb-color" title="الألوان"><span id="color-dot"></span></button>
+        <input type="range" id="tb-size" min="1" max="20" value="6" title="حجم القلم والممحاة">
+        <span class="tb-sep"></span>
+        <button class="tb-btn" id="tb-eraser" title="الممحاة" data-ico="eraser"></button>
+        <button class="tb-btn" id="tb-shape" title="الأشكال" data-ico="shape"></button>
+        <button class="tb-btn" id="tb-tpl" title="قالب الصفحة" data-ico="layout"></button>
+        <button class="tb-btn" id="tb-addpage" title="صفحة جديدة" data-ico="plus"></button>
+        <button class="tb-btn" id="tb-bg" title="لون الخلفية" data-ico="bgicon"></button>
+        <button class="tb-text" id="tb-erasemode" title="نوع الممحاة">مسح جزئي</button>
+        <button class="tb-btn on" id="tb-hand" title="الإصبع يرسم أو يتحرك" data-ico="hand"></button>
+        <span class="tb-sep"></span>
+        <button class="tb-btn" id="tb-zin" title="تكبير" data-ico="zoomIn"></button>
+        <button class="tb-btn" id="tb-zout" title="تصغير" data-ico="zoomOut"></button>
+        <button class="tb-btn" id="tb-clear" title="مسح الصفحة" data-ico="trash"></button>
+        <button class="tb-btn" id="tb-save" title="حفظ الكتابة" data-ico="check"></button>
+        <span class="tb-sep"></span>
+        <button class="tb-btn" id="tb-orient" title="شريط رأسي أو أفقي" data-ico="orient"></button>
+        <span class="tb-page" id="tb-page">1 / 1</span>
+    </div>
+</div>
+
+<!-- نافذة الأقلام -->
+<div class="modal" id="pens-modal">
+    <div class="modal-box">
+        <h2>اختار القلم</h2>
+        <div class="pens-grid" id="pens-grid"></div>
+        <div class="modal-actions"><button class="dbtn" data-close="pens-modal">إغلاق</button></div>
+    </div>
+</div>
+
+<!-- نافذة لون الخلفية -->
+<div class="modal" id="bg-modal">
+    <div class="modal-box">
+        <h2>لون الخلفية</h2>
+        <div class="pal-grid" id="bg-grid"></div>
+        <div class="pal-custom">
+            <label for="bg-custom">لون مخصص</label>
+            <input type="color" id="bg-custom" value="#ffffff">
+        </div>
+        <div class="modal-actions"><button class="dbtn" data-close="bg-modal">إغلاق</button></div>
+    </div>
+</div>
+
+<!-- نافذة القوالب -->
+<div class="modal" id="nb-modal">
+    <div class="modal-box">
+        <h2 id="nb-title">دفتر جديد</h2>
+        <div class="tpl-grid" id="nb-grid"></div>
+        <div class="modal-actions"><button class="dbtn" data-close="nb-modal">إغلاق</button></div>
+    </div>
+</div>
+
+<!-- نافذة الأشكال -->
+<div class="modal" id="shape-modal">
+    <div class="modal-box">
+        <h2>اختار الشكل</h2>
+        <div class="shape-grid">
+            <button class="shape-sw" title="خط مستقيم" onclick="pickShape('line')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="20" x2="20" y2="4"/></svg></button>
+            <button class="shape-sw" title="سهم" onclick="pickShape('arrow')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="20" x2="19" y2="5"/><path d="M10 5h9v9"/></svg></button>
+            <button class="shape-sw" title="سهم في الاتجاهين" onclick="pickShape('darrow')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="19" x2="19" y2="5"/><path d="M5 19 H10 M5 19 V14 M19 5 H14 M19 5 V10"/></svg></button>
+            <button class="shape-sw" title="مستطيل" onclick="pickShape('rect')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="6" width="18" height="12" rx="1.5"/></svg></button>
+            <button class="shape-sw" title="مربع" onclick="pickShape('square')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="5" y="5" width="14" height="14" rx="1"/></svg></button>
+            <button class="shape-sw" title="دايرة" onclick="pickShape('circle')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8"/></svg></button>
+            <button class="shape-sw" title="مثلث" onclick="pickShape('triangle')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M12 4 L21 19 L3 19 Z"/></svg></button>
+            <button class="shape-sw" title="معين" onclick="pickShape('diamond')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M12 3 L21 12 L12 21 L3 12 Z"/></svg></button>
+            <button class="shape-sw" title="متوازي أضلاع" onclick="pickShape('parallelogram')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M7 6 H21 L17 18 H3 Z"/></svg></button>
+            <button class="shape-sw" title="سداسي" onclick="pickShape('hexagon')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M7 4 H17 L22 12 L17 20 H7 L2 12 Z"/></svg></button>
+            <button class="shape-sw" title="خماسي" onclick="pickShape('pentagon')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M12 3 L21 9.8 L17.6 20 H6.4 L3 9.8 Z"/></svg></button>
+            <button class="shape-sw" title="نجمة" onclick="pickShape('star')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3 L14.6 9 L21 9.3 L16 13.3 L17.8 19.6 L12 16.2 L6.2 19.6 L8 13.3 L3 9.3 L9.4 9 Z"/></svg></button>
+        </div>
+        <div class="modal-actions"><button class="dbtn" data-close="shape-modal">إغلاق</button></div>
+    </div>
+</div>
+
+<!-- نافذة الألوان -->
+<div class="modal" id="pal-modal">
+    <div class="modal-box">
+        <h2>اختار اللون</h2>
+        <div class="pal-grid" id="pal-grid"></div>
+        <div class="pal-custom">
+            <label for="pal-custom">لون مخصص</label>
+            <input type="color" id="pal-custom" value="#111827">
+        </div>
+        <div class="modal-actions"><button class="dbtn" data-close="pal-modal">إغلاق</button></div>
+    </div>
+</div>
+
+<!-- نافذة التأكيد -->
+<div class="modal" id="dialog">
+    <div class="modal-box">
+        <h2 id="dlg-title"></h2>
+        <p id="dlg-msg" style="line-height:1.8;margin:0"></p>
+        <div class="modal-actions" id="dlg-btns"></div>
+    </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ---------- أيقونات ----------
+const ICONS = {
+    undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+    redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
+    eraser: '<path d="M7 21h10"/><path d="M5.5 13.5 12 7l5 5-6.5 6.5a2 2 0 0 1-2.8 0L5.5 16.3a2 2 0 0 1 0-2.8Z"/>',
+    trash: '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>',
+    eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    eyeOff: '<path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-3.2 4.2M6.6 6.6A18 18 0 0 0 2 12s3.5 7 10 7a10 10 0 0 0 5.4-1.6"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    chevL: '<path d="m15 18-6-6 6-6"/>',
+    chevR: '<path d="m9 18 6-6-6-6"/>',
+    zoomIn: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/>',
+    zoomOut: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M8 11h6"/>',
+    hand: '<path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v7M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-3l-3.6-5.1a2 2 0 0 1 3-2.6L6 13"/>',
+    file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    shape: '<rect x="3" y="3" width="10" height="10" rx="1.5"/><circle cx="16.5" cy="16.5" r="4.5"/>',
+    layout: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>',
+    orient: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18"/>',
+    bgicon: '<circle cx="12" cy="12" r="9"/><circle cx="8" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="16" cy="10" r="1.2"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>'
+};
+function svg(name) {
+    return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[name] || '') + '</svg>';
+}
+document.querySelectorAll('[data-ico]').forEach(el => { el.innerHTML = svg(el.dataset.ico); });
+
+// ---------- الأقلام (30 نوع) ----------
+// m: سُمك نسبي، a: شفافية، c: شكل الطرف، d: تقطيع، g: توهج، t: حبيبات الورق، hl: تظليل، sp: رذاذ
+const PENS = [
+    { n:'قلم حبر', m:1, a:1, c:'round' },
+    { n:'قلم جاف', m:0.9, a:1, c:'round' },
+    { n:'حبر ناعم', m:2, a:0.55, c:'round' },
+    { n:'فاين لاينر', m:0.5, a:1, c:'round' },
+    { n:'قلم تقني', m:0.35, a:1, c:'butt' },
+    { n:'قلم رفيع', m:0.22, a:1, c:'round' },
+    { n:'قلم ريشة', m:1.4, a:1, c:'square' },
+    { n:'خط عريض', m:4, a:1, c:'round' },
+    { n:'حبر لامع', m:1.6, a:0.95, c:'round', g:0.6 },
+    { n:'قلم رصاص', m:0.7, a:0.85, c:'round', t:0.35 },
+    { n:'رصاص ناعم', m:1.6, a:0.75, c:'round', t:0.5 },
+    { n:'فحم', m:2.8, a:0.7, c:'round', t:0.7 },
+    { n:'طبشورة', m:3.5, a:0.6, c:'round', t:0.9 },
+    { n:'ألوان خشبية', m:2.2, a:0.9, c:'round', t:0.25 },
+    { n:'ماركر', m:3, a:0.9, c:'square' },
+    { n:'ماركر عريض', m:5, a:0.85, c:'square' },
+    { n:'فرشاة', m:3.2, a:0.8, c:'round', g:0.15 },
+    { n:'تظليل أصفر', m:3.2, a:0.35, c:'square', hl:1 },
+    { n:'تظليل أخضر', m:3.2, a:0.35, c:'square', hl:1 },
+    { n:'تظليل وردي', m:3.2, a:0.35, c:'square', hl:1 },
+    { n:'تظليل برتقالي', m:3.2, a:0.35, c:'square', hl:1 },
+    { n:'خط متقطع', m:1, a:1, c:'butt', d:[3,2] },
+    { n:'خط منقط', m:1, a:1, c:'round', d:[0.01,2.2] },
+    { n:'شرطات طويلة', m:1, a:1, c:'butt', d:[6,3] },
+    { n:'نيون أزرق', m:1.2, a:1, c:'round', g:2.5 },
+    { n:'نيون وردي', m:1.2, a:1, c:'round', g:2.5 },
+    { n:'نيون أخضر', m:1.2, a:1, c:'round', g:2.5 },
+    { n:'ذهبي لامع', m:1.4, a:1, c:'round', g:1.6 },
+    { n:'رذاذ', m:1, a:1, c:'round', sp:1 },
+    { n:'قلم جيل', m:1.8, a:1, c:'round' }
+];
+const PALETTE = ['#111827','#1e293b','#475569','#94a3b8','#e2e8f0','#ffffff','#dc2626','#ef4444','#f97316','#f59e0b','#facc15','#84cc16','#16a34a','#10b981','#14b8a6','#06b6d4','#0ea5e9','#2563eb','#4f46e5','#7c3aed','#a855f7','#ec4899','#be185d','#78350f'];
+
+// ---------- القوالب الجاهزة للصفحات ----------
+const TEMPLATES = [
+    ['blank', 'بيضاء'], ['lines', 'أسطر'], ['wide', 'أسطر عريضة'], ['grid', 'مربعات'], ['dots', 'نقط'],
+    ['cornell', 'كورنيل'], ['onenote', 'ون نوت'], ['flow', 'مخطط تدفق'],
+    ['mm-1', 'خريطة 1: مركزية (6 فروع)'], ['mm-2', 'خريطة 2: مركزية (8 فروع)'], ['mm-3', 'خريطة 3: شجرة للأسفل'], ['mm-4', 'خريطة 4: شجرة لليمين'], ['mm-5', 'خريطة 5: شجرة يمين ويسار'], ['mm-6', 'خريطة 6: هرمية تنظيمية'], ['mm-7', 'خريطة 7: عظم السمكة'], ['mm-8', 'خريطة 8: دورة'], ['mm-9', 'خريطة 9: SWOT'], ['mm-10', 'خريطة 10: فن (فينّ)'], ['mm-11', 'خريطة 11: هرم'], ['mm-12', 'خريطة 12: محور وأربع زوايا'], ['mm-13', 'خريطة 13: خط زمني'], ['mm-14', 'خريطة 14: مسار متعرج'], ['mm-15', 'خريطة 15: فقاعات'], ['mm-16', 'خريطة 16: مصفوفة الأولويات'], ['mm-17', 'خريطة 17: أسئلة'], ['mm-18', 'خريطة 18: نجمة'], ['mm-19', 'خريطة 19: أعمدة أفكار'], ['mm-20', 'خريطة 20: سحابة أفكار']
+];
+
+// الأقلام الأساسية الخمسة اللي ظاهرة في الشريط (تقدر تغيّر أي واحد)
+const DEFAULT_QUICK = [
+    { p: 0, c: '#111827', s: 6 },
+    { p: 1, c: '#2563eb', s: 6 },
+    { p: 2, c: '#dc2626', s: 4 },
+    { p: 17, c: '#facc15', s: 8 },
+    { p: 14, c: '#16a34a', s: 8 }
+];
+const INK_COLORS = ['#111827', '#2563eb', '#dc2626', '#16a34a', '#facc15', '#f97316', '#a855f7', '#ec4899', '#ffffff', '#38bdf8'];
+const BG_CHOICES = ['#ffffff', '#fdf6e3', '#f1f5f9', '#111111', '#0f172a', '#1f3d2b', '#3b2f2f', '#1e1b4b'];
+function lum(hex) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substr(0, 2), 16), g = parseInt(h.substr(2, 2), 16), b = parseInt(h.substr(4, 2), 16);
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+function isDarkBg(hex) { return lum(hex) < 0.45; }
+
+// ---------- محتوى خارجي: صور وخرائط تضيفها على GitHub بدون بيلد ----------
+const CONTENT_BASE = 'https://raw.githubusercontent.com/mmm14101995-sudo/PDFBoard/main/content/';
+let REMOTE_TEMPLATES = [];
+const imgCache = new Map();
+async function loadContentTemplates() {
+    try {
+        const res = await fetch(CONTENT_BASE + 'templates.json', { cache: 'no-cache' });
+        const list = await res.json();
+        if (Array.isArray(list)) {
+            REMOTE_TEMPLATES = list
+                .filter(t => t && t.title && t.img)
+                .map(t => ({ id: 'img:' + CONTENT_BASE + t.img, label: t.title }));
+        }
+    } catch (e) { /* مفيش نت: القوالب الأساسية بس */ }
+}
+// يرجّع الصورة لو اتحمّلت، ولو لأ يبدأ تحميلها وينادي onReady
+function templateImage(url, onReady) {
+    let im = imgCache.get(url);
+    if (!im) {
+        im = new Image();
+        im.onload = () => onReady && onReady();
+        im.src = url;
+        imgCache.set(url, im);
+    }
+    return im.complete && im.naturalWidth ? im : null;
+}
+
+// ---------- الحالة ----------
+const $ = id => document.getElementById(id);
+const stage = $('stage'), pageEl = $('page'), pdfc = $('pdfc'), hlc = $('hlc'), annc = $('annc');
+const cHl = document.createElement('canvas'), cAnn = document.createElement('canvas');
+const state = {
+    name: '', doc: null, kind: 'pdf', tpls: null, title: '', bg: '#ffffff', orient: 'horiz', quick: DEFAULT_QUICK.map(q => ({ ...q })), pageNo: 1, total: 0,
+    pages: {}, undo: [], redo: [], saved: '{}',
+    tool: 'pen', shapeKind: 'line', penId: 0, color: '#111827', size: 6,
+    eraseMode: 'partial', fingerDraw: true, cur: null
+};
+let cssW = 0, cssH = 0, pageRatio = 1.414;
+let zoom = 1, panX = 0, panY = 0;
+let renderToken = 0, viewerOpen = false, barHidden = false, lastPenT = 0;
+let cacheKey = '', cacheVer = 0;
+function bumpCache() { cacheVer++; }
+
+// ---------- مساعدات ----------
+function rng(seed) {
+    let x = (seed | 0) || 7;
+    return () => {
+        x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+        return ((x >>> 0) % 10000) / 10000;
+    };
+}
+function sizeW() { return state.size * 0.0011; }
+function eraserRadius() { return 0.006 + state.size * 0.0032; }
+function curStrokes() { return state.pages[state.pageNo] || (state.pages[state.pageNo] = []); }
+function snapshotPage(n) { return JSON.stringify(state.pages[n] || []); }
+function pushUndo(before) {
+    state.undo.push({ n: state.pageNo, data: before });
+    if (state.undo.length > 40) state.undo.shift();
+    state.redo = [];
+}
+function canon(o) {
+    const out = {};
+    Object.keys(o).sort().forEach(k => { out[k] = o[k]; });
+    return JSON.stringify(out);
+}
+function cleanPages() {
+    const o = {};
+    Object.keys(state.pages).forEach(k => {
+        const v = state.pages[k];
+        if (Array.isArray(v) && v.length) o[k] = v;
+    });
+    return o;
+}
+function snapshotDoc() {
+    return canon({ pages: cleanPages(), tpls: state.kind === 'nb' ? state.tpls : null, bg: state.kind === 'nb' ? state.bg : null });
+}
+function isDirty() { return snapshotDoc() !== state.saved; }
+function toast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('show'), 1600);
+}
+function showDialog(title, msg, buttons) {
+    $('dlg-title').textContent = title;
+    $('dlg-msg').textContent = msg;
+    const box = $('dlg-btns');
+    box.innerHTML = '';
+    buttons.forEach(b => {
+        const el = document.createElement('button');
+        el.className = 'dbtn ' + (b.cls || '');
+        el.textContent = b.label;
+        el.addEventListener('click', () => { closeModal('dialog'); if (b.fn) b.fn(); });
+        box.appendChild(el);
+    });
+    openModal('dialog');
+}
+function openModal(id) { $(id).classList.add('open'); }
+function closeModal(id) { $(id).classList.remove('open'); }
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeModal(b.dataset.close)));
+
+// جسر الأندرويد (لو الصفحة شغالة في المتصفح بنستخدم نسخة تجريبية)
+const STUB = { listPdfs: () => '[]', listNotebooks: () => '[]', loadAnnotations: () => '', saveAnnotations: () => true, deletePdf: () => true, deleteNotebook: () => true, pickPdf: () => {} };
+function A(name, ...args) {
+    if (window.Android && typeof window.Android[name] === 'function') return window.Android[name](...args);
+    return STUB[name] ? STUB[name](...args) : undefined;
+}
+
+// ---------- الأشكال ----------
+// الحساب بالبيكسل عشان الدايرة تطلع دايرة وميبقاش بيضاوي، وبعدين نرجّعها للنسبة
+function shapePx(kind, a, b) {
+    const [x1, y1] = a, [x2, y2] = b;
+    if (kind === 'rect') return [[x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]];
+    if (kind === 'square') {
+        const d = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+        const X = x1 + (x2 >= x1 ? d : -d), Y = y1 + (y2 >= y1 ? d : -d);
+        return [[x1, y1], [X, y1], [X, Y], [x1, Y], [x1, y1]];
+    }
+    if (kind === 'circle') {
+        const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, rx = Math.abs(x2 - x1) / 2, ry = Math.abs(y2 - y1) / 2;
+        const pts = [];
+        for (let i = 0; i <= 72; i++) { const t = i / 72 * Math.PI * 2; pts.push([cx + rx * Math.cos(t), cy + ry * Math.sin(t)]); }
+        return pts;
+    }
+    if (kind === 'triangle') { const mx = (x1 + x2) / 2; return [[mx, y1], [x2, y2], [x1, y2], [mx, y1]]; }
+    if (kind === 'diamond') {
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+        return [[mx, y1], [x2, my], [mx, y2], [x1, my], [mx, y1]];
+    }
+    if (kind === 'parallelogram') {
+        const sl = (x2 - x1) * 0.25;
+        return [[x1 + sl, y1], [x2, y1], [x2 - sl, y2], [x1, y2], [x1 + sl, y1]];
+    }
+    if (kind === 'hexagon') {
+        const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, rx = Math.abs(x2 - x1) / 2, ry = Math.abs(y2 - y1) / 2;
+        const pts = [];
+        for (let i = 0; i <= 6; i++) { const t = i * Math.PI / 3; pts.push([cx + rx * Math.cos(t), cy + ry * Math.sin(t)]); }
+        return pts;
+    }
+    if (kind === 'pentagon' || kind === 'star') {
+        const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, R = Math.min(Math.abs(x2 - x1), Math.abs(y2 - y1)) / 2;
+        const pts = [];
+        if (kind === 'pentagon') {
+            for (let i = 0; i <= 5; i++) { const t = -Math.PI / 2 + i * 2 * Math.PI / 5; pts.push([cx + R * Math.cos(t), cy + R * Math.sin(t)]); }
+        } else {
+            for (let i = 0; i <= 10; i++) {
+                const t = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 === 0 ? R : R * 0.45;
+                pts.push([cx + rr * Math.cos(t), cy + rr * Math.sin(t)]);
+            }
+        }
+        return pts;
+    }
+    if (kind === 'arrow' || kind === 'darrow') {
+        const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1;
+        const head = Math.min(40, len * 0.25), ang = Math.atan2(dy, dx);
+        const hd = (tip, a2) => [
+            [tip[0] - head * Math.cos(a2 - Math.PI / 6), tip[1] - head * Math.sin(a2 - Math.PI / 6)],
+            [tip[0] - head * Math.cos(a2 + Math.PI / 6), tip[1] - head * Math.sin(a2 + Math.PI / 6)]
+        ];
+        const [e1, e2] = hd([x2, y2], ang);
+        if (kind === 'arrow') return [[x1, y1], [x2, y2], e1, [x2, y2], e2];
+        const [s1, s2] = hd([x1, y1], ang + Math.PI);
+        return [s1, [x1, y1], s2, [x1, y1], [x2, y2], e1, [x2, y2], e2];
+    }
+    return [[x1, y1], [x2, y2]];
+}
+// نفس الحساب لكن بالنسبة (0..1) زي باقي الخطوط
+function shapeN(kind, a, b) {
+    const W = cssW, H = cssH;
+    const pts = shapePx(kind, [a[0] * W, a[1] * H], [b[0] * W, b[1] * H]).map(([x, y]) => [x / W, y / H]);
+    return densify(pts, 6);
+}
+// نضيف نقط على طول كل ضلع عشان الممحاة تلمس الشكل في أي مكان مش بس في الأركان
+function densify(pts, maxPx) {
+    const out = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        const n = Math.max(1, Math.ceil(Math.hypot((b[0] - a[0]) * cssW, (b[1] - a[1]) * cssH) / maxPx));
+        for (let k = 0; k < n; k++) out.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
+    }
+    if (pts.length) out.push(pts[pts.length - 1]);
+    return out;
+}
+
+// ---------- رسم الخط ----------
+function drawStroke(ctx, st, W, H) {
+    const pen = PENS[st.p] || PENS[0];
+    const pts = st.pts;
+    if (!pts || !pts.length) return;
+    const lw = Math.max(1, st.w * W * pen.m);
+    const rnd = rng(st.s || 7);
+    const P = pts.map(p => [p[0] * W, p[1] * H]);
+    if (st.k && P.length > 1) {
+        ctx.save();
+        ctx.strokeStyle = st.c;
+        ctx.lineWidth = lw;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'miter';
+        ctx.miterLimit = 6;
+        ctx.globalAlpha = pen.a;
+        ctx.beginPath();
+        ctx.moveTo(P[0][0], P[0][1]);
+        for (let i = 1; i < P.length; i++) ctx.lineTo(P[i][0], P[i][1]);
+        ctx.stroke();
+        ctx.restore();
+        return;
+    }
+    ctx.save();
+    ctx.strokeStyle = st.c;
+    ctx.fillStyle = st.c;
+    ctx.globalAlpha = pen.a;
+    ctx.lineWidth = lw;
+    ctx.lineCap = pen.c || 'round';
+    ctx.lineJoin = 'round';
+    if (pen.d) ctx.setLineDash(pen.d.map(v => v * lw));
+    if (pen.g) { ctx.shadowBlur = pen.g * lw; ctx.shadowColor = st.c; }
+
+    if (pen.sp) {
+        P.forEach(([x, y]) => {
+            for (let k = 0; k < 10; k++) {
+                const a = rnd() * Math.PI * 2, r = rnd() * lw * 2.2;
+                ctx.beginPath();
+                ctx.arc(x + Math.cos(a) * r, y + Math.sin(a) * r, Math.max(0.6, lw * 0.12), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        });
+        ctx.restore();
+        return;
+    }
+    if (P.length === 1) {
+        ctx.beginPath();
+        ctx.arc(P[0][0], P[0][1], lw / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        return;
+    }
+    ctx.beginPath();
+    ctx.moveTo(P[0][0], P[0][1]);
+    for (let i = 1; i < P.length; i++) {
+        const mx = (P[i - 1][0] + P[i][0]) / 2, my = (P[i - 1][1] + P[i][1]) / 2;
+        ctx.quadraticCurveTo(P[i - 1][0], P[i - 1][1], mx, my);
+    }
+    ctx.lineTo(P[P.length - 1][0], P[P.length - 1][1]);
+    ctx.stroke();
+
+    if (pen.t) {
+        // حبيبات الورق: نشيل نقط صغيرة من الخط عشان يبان زي القلم على الورق
+        ctx.setLineDash([]);
+        ctx.shadowBlur = 0;
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.globalAlpha = 1;
+        const k = Math.max(1, Math.round(pen.t * 3));
+        P.forEach(([x, y]) => {
+            for (let j = 0; j < k; j++) {
+                ctx.beginPath();
+                ctx.arc(x + (rnd() - 0.5) * lw, y + (rnd() - 0.5) * lw, Math.max(0.5, lw * 0.09), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        });
+    }
+    ctx.restore();
+}
+
+function ensureCache(W, H) {
+    const key = cacheVer + ':' + state.pageNo + ':' + W + 'x' + H;
+    if (key === cacheKey) return;
+    cacheKey = key;
+    [[cHl, true], [cAnn, false]].forEach(([c, isHl]) => {
+        c.width = W; c.height = H;
+        const ctx = c.getContext('2d');
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, W, H);
+        (state.pages[state.pageNo] || []).forEach(st => {
+            const pen = PENS[st.p] || PENS[0];
+            if (!!pen.hl === isHl) drawStroke(ctx, st, W, H);
+        });
+    });
+}
+
+function redrawLayers() {
+    const W = annc.width, H = annc.height;
+    ensureCache(W, H);
+    [[hlc, true, cHl], [annc, false, cAnn]].forEach(([c, isHl, src]) => {
+        const ctx = c.getContext('2d');
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, W, H);
+        ctx.drawImage(src, 0, 0);
+        if (state.cur) {
+            const pen = PENS[state.cur.p] || PENS[0];
+            if (!!pen.hl === isHl) drawStroke(ctx, state.cur, W, H);
+        }
+    });
+}
+
+// ---------- الممحاة ----------
+function nearPt(a, p, r) {
+    const dx = a[0] - p[0], dy = (a[1] - p[1]) * pageRatio;
+    return dx * dx + dy * dy <= r * r;
+}
+function mkStroke(st, pts) {
+    return { p: st.p, c: st.c, w: st.w, s: ((st.s || 1) * 31 + pts.length) | 0, pts, k: st.k };
+}
+// يرجّع true لو حصل مسح
+function eraseAt(p) {
+    const r = eraserRadius();
+    const list = curStrokes();
+    let changed = false;
+    const out = [];
+    list.forEach(st => {
+        const hit = st.pts.some(q => nearPt(q, p, r));
+        if (!hit) { out.push(st); return; }
+        changed = true;
+        if (state.eraseMode === 'whole') return;
+        let run = [];
+        st.pts.forEach(q => {
+            if (nearPt(q, p, r)) {
+                if (run.length > 1) out.push(mkStroke(st, run));
+                run = [];
+            } else {
+                run.push(q);
+            }
+        });
+        if (run.length > 1) out.push(mkStroke(st, run));
+    });
+    if (changed) { state.pages[state.pageNo] = out; bumpCache(); }
+    return changed;
+}
+
+// ---------- تحويل نقطة اللمس لإحداثيات الصفحة (0..1) ----------
+function normPoint(e) {
+    const r = pageEl.getBoundingClientRect();
+    return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
+}
+
+// ---------- التحكم باللمس والقلم ----------
+const ptrs = new Map();
+let mode = null, erasePid = null, eraseBefore = null, lastErase = null, pinch = null;
+
+function startStroke(e) {
+    const p = normPoint(e);
+    if (state.tool === 'erase') {
+        mode = 'erase';
+        erasePid = e.pointerId;
+        eraseBefore = snapshotPage(state.pageNo);
+        lastErase = p;
+        if (eraseAt(p)) redrawLayers();
+        return;
+    }
+    mode = 'draw';
+    if (state.tool === 'shape') {
+        state.cur = { p: state.penId, c: state.color, w: sizeW(), pts: [p, p], start: p, k: state.shapeKind, s: (Math.random() * 1e9) | 0, pid: e.pointerId };
+    } else {
+        state.cur = { p: state.penId, c: state.color, w: sizeW(), pts: [p], s: (Math.random() * 1e9) | 0, pid: e.pointerId };
+    }
+    redrawLayers();
+}
+
+function addPoint(e) {
+    const p = normPoint(e);
+    if (state.cur.start) {
+        state.cur.pts = shapeN(state.cur.k, state.cur.start, p);
+        redrawLayers();
+        return;
+    }
+    const last = state.cur.pts[state.cur.pts.length - 1];
+    const dx = (p[0] - last[0]) * cssW, dy = (p[1] - last[1]) * cssH;
+    if (dx * dx + dy * dy < 2.25) return;
+    state.cur.pts.push(p);
+    redrawLayers();
+}
+
+function commitStroke() {
+    if (!state.cur) return;
+    pushUndo(snapshotPage(state.pageNo));
+    bumpCache();
+    curStrokes().push({ p: state.cur.p, c: state.cur.c, w: state.cur.w, s: state.cur.s, pts: state.cur.pts, k: state.cur.start ? state.cur.k : undefined });
+    state.cur = null;
+    mode = null;
+    redrawLayers();
+    refreshToolbar();
+}
+
+function cancelStroke() {
+    if (state.cur) { state.cur = null; redrawLayers(); }
+}
+
+function eraseMove(e) {
+    const p = normPoint(e);
+    const dx = (p[0] - lastErase[0]) * cssW, dy = (p[1] - lastErase[1]) * cssH;
+    const dist = Math.hypot(dx, dy) / cssW;
+    const steps = Math.max(1, Math.ceil(dist / (eraserRadius() * 0.5)));
+    let changed = false;
+    for (let k = 1; k <= steps; k++) {
+        const q = [lastErase[0] + (p[0] - lastErase[0]) * k / steps, lastErase[1] + (p[1] - lastErase[1]) * k / steps];
+        if (eraseAt(q)) changed = true;
+    }
+    lastErase = p;
+    if (changed) redrawLayers();
+}
+
+function endErase() {
+    if (eraseBefore !== null && snapshotPage(state.pageNo) !== eraseBefore) pushUndo(eraseBefore);
+    eraseBefore = null;
+    mode = null;
+    erasePid = null;
+    redrawLayers();
+    refreshToolbar();
+}
+
+function applyTransform() {
+    if (zoom <= 1.001) { zoom = 1; panX = 0; panY = 0; }
+    pageEl.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+}
+
+function beginPinch() {
+    cancelStroke();
+    mode = 'pinch';
+    const [a, b] = [...ptrs.values()];
+    const sr = stage.getBoundingClientRect();
+    const m = { x: (a.x + b.x) / 2 - sr.left, y: (a.y + b.y) / 2 - sr.top };
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, z: zoom, p0: { x: (m.x - panX) / zoom, y: (m.y - panY) / zoom }, m0: m, m1: m };
+}
+
+function updatePinch() {
+    const vals = [...ptrs.values()];
+    if (vals.length < 2 || !pinch) return;
+    const [a, b] = vals;
+    const sr = stage.getBoundingClientRect();
+    const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+    const m = { x: (a.x + b.x) / 2 - sr.left, y: (a.y + b.y) / 2 - sr.top };
+    pinch.m1 = m;
+    zoom = Math.min(5, Math.max(1, pinch.z * d / pinch.d));
+    panX = m.x - pinch.p0.x * zoom;
+    panY = m.y - pinch.p0.y * zoom;
+    applyTransform();
+}
+
+function zoomBy(f) {
+    const m = { x: stage.clientWidth / 2, y: stage.clientHeight / 2 };
+    const p0 = { x: (m.x - panX) / zoom, y: (m.y - panY) / zoom };
+    zoom = Math.min(5, Math.max(1, zoom * f));
+    panX = m.x - p0.x * zoom;
+    panY = m.y - p0.y * zoom;
+    applyTransform();
+}
+
+stage.addEventListener('pointerdown', e => {
+    if (!viewerOpen) return;
+    if (e.pointerType === 'pen') lastPenT = performance.now();
+    // نرفض لمس اليد لما القلم يكون اشتغل من شوية (رفض كف اليد)
+    if (e.pointerType === 'touch' && performance.now() - lastPenT < 1200) return;
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType });
+    try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+    if (ptrs.size === 2) { beginPinch(); return; }
+    if (ptrs.size === 1) {
+        const drawable = e.pointerType !== 'touch' || state.fingerDraw;
+        if (!drawable) { mode = 'pan'; return; }
+        startStroke(e);
+    }
+});
+
+stage.addEventListener('pointermove', e => {
+    const p = ptrs.get(e.pointerId);
+    if (!p) return;
+    const px = p.x, py = p.y;
+    p.x = e.clientX; p.y = e.clientY;
+    if (mode === 'pinch') updatePinch();
+    else if (mode === 'pan') { panX += e.clientX - px; panY += e.clientY - py; applyTransform(); }
+    else if (mode === 'draw' && state.cur && e.pointerId === state.cur.pid) {
+        const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+        (evs.length ? evs : [e]).forEach(ev => addPoint(ev));
+    }
+    else if (mode === 'erase' && e.pointerId === erasePid) eraseMove(e);
+});
+
+function endPointer(e) {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.delete(e.pointerId);
+    if (mode === 'draw' && state.cur && e.pointerId === state.cur.pid) commitStroke();
+    if (mode === 'erase' && e.pointerId === erasePid) endErase();
+    if (ptrs.size === 0) { mode = null; pinch = null; }
+    else if (mode === 'pinch' && ptrs.size < 2) { finishSwipe(); mode = null; pinch = null; }
+}
+stage.addEventListener('pointerup', endPointer);
+stage.addEventListener('pointercancel', endPointer);
+
+// ---------- الأقلام السريعة (شبه Notein) ----------
+let pensSlot = null, paletteSlot = null;
+function shade(hex, f) {
+    const h = hex.replace('#', '');
+    const c = [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16));
+    const m = f > 0 ? 255 : 0, t = Math.abs(f);
+    return '#' + c.map(v => Math.round(v + (m - v) * t).toString(16).padStart(2, '0')).join('');
+}
+function penKind(p) {
+    const q = PENS[p] || PENS[0];
+    if (q.hl) return 'hl';
+    if (q.t) return 'pencil';
+    if (q.sp || q.m >= 2.5) return 'marker';
+    if (q.d || q.m <= 0.5) return 'fine';
+    return 'fountain';
+}
+function penSVG(kind, color, id) {
+    const lt = shade(color, 0.45), dk = shade(color, -0.35);
+    const grad = '<defs><linearGradient id="' + id + '" x1="0" x2="1">'
+        + '<stop offset="0" stop-color="' + dk + '"/><stop offset=".38" stop-color="' + lt + '"/>'
+        + '<stop offset=".6" stop-color="' + color + '"/><stop offset="1" stop-color="' + dk + '"/></linearGradient></defs>';
+    const body = {
+        fountain: '<rect x="8" y="2" width="10" height="19" rx="3.5" fill="url(#' + id + ')"/><rect x="8" y="19" width="10" height="3" fill="#475569"/><path d="M8.5 22 L17.5 22 L15.2 35 Q13 39.5 10.8 35 Z" fill="#cbd5e1" stroke="#64748b" stroke-width=".4"/>',
+        fine: '<rect x="10" y="2" width="6" height="25" rx="2.2" fill="url(#' + id + ')"/><path d="M10 27 L16 27 L13 39 Z" fill="#475569"/>',
+        hl: '<rect x="7" y="2" width="12" height="24" rx="5" fill="url(#' + id + ')"/><path d="M8 26 H18 L16.5 37 Q13 40 9.5 37 Z" fill="#475569"/>',
+        marker: '<rect x="6.3" y="2" width="13.4" height="26" rx="3" fill="url(#' + id + ')"/><path d="M6.3 28 H19.7 L17 38.5 H9 Z" fill="#6b7280"/>',
+        pencil: '<rect x="9" y="6" width="8" height="20" fill="url(#' + id + ')"/><path d="M9 26 H17 L13 38.5 Z" fill="#fcd9b6"/><path d="M11.5 33 H14.5 L13 38.5 Z" fill="#1f2937"/>'
+    }[kind];
+    return '<svg viewBox="0 0 26 40">' + grad + body + '</svg>';
+}
+function refreshQuick() {
+    const box = $('qslots');
+    if (!box) return;
+    box.innerHTML = '';
+    state.quick.forEach((q, i) => {
+        const b = document.createElement('button');
+        b.className = 'qslot' + (state.tool === 'pen' && state.penId === q.p && state.color === q.c ? ' on' : '');
+        b.title = PENS[q.p].n;
+        b.innerHTML = penSVG(penKind(q.p), q.c, 'qg' + i);
+        let timer = null, longed = false;
+        b.addEventListener('pointerdown', () => {
+            longed = false;
+            timer = setTimeout(() => { longed = true; openPenFor(i); }, 600);
+        });
+        const cancel = () => clearTimeout(timer);
+        b.addEventListener('pointerup', cancel);
+        b.addEventListener('pointerleave', cancel);
+        b.addEventListener('pointercancel', cancel);
+        b.addEventListener('click', () => { if (!longed) onQuickTap(i); });
+        box.appendChild(b);
+    });
+}
+function buildColorGrid() {
+    const g = $('colorgrid');
+    if (!g) return;
+    g.innerHTML = '';
+    INK_COLORS.forEach(c => {
+        const b = document.createElement('button');
+        b.className = 'cg';
+        b.dataset.c = c;
+        b.style.background = c;
+        b.title = c;
+        b.addEventListener('click', () => setInk(c));
+        g.appendChild(b);
+    });
+}
+function setInk(c) {
+    const idx = state.quick.findIndex(q => q.p === state.penId && q.c === state.color);
+    state.color = c;
+    if (idx >= 0) state.quick[idx].c = c;
+    state.tool = 'pen';
+    saveSettings();
+    refreshToolbar();
+}
+function setSize(v) {
+    state.size = v;
+    const idx = state.quick.findIndex(q => q.p === state.penId && q.c === state.color);
+    if (idx >= 0) state.quick[idx].s = v;
+    $('tb-size').value = v;
+    saveSettings();
+    refreshToolbar();
+}
+function refreshGrid() {
+    document.querySelectorAll('.cg').forEach(b => b.classList.toggle('on', b.dataset.c.toLowerCase() === state.color.toLowerCase()));
+    document.querySelectorAll('.szd').forEach(b => b.classList.toggle('on', +b.dataset.s === state.size));
+}
+function onQuickTap(i) {
+    const q = state.quick[i];
+    const active = state.tool === 'pen' && state.penId === q.p && state.color === q.c;
+    if (active) { openColorFor(i); return; }
+    state.penId = q.p;
+    state.color = q.c;
+    state.size = q.s;
+    state.tool = 'pen';
+    refreshToolbar();
+}
+function openPenFor(i) {
+    pensSlot = i;
+    buildPens();
+    openModal('pens-modal');
+}
+function openColorFor(i) {
+    paletteSlot = i;
+    buildPalette();
+    openModal('pal-modal');
+}
+function saveSettings() {
+    A('saveAnnotations', 'app_settings', JSON.stringify({ quick: state.quick, orient: state.orient }));
+}
+function openBgPicker() {
+    const g = $('bg-grid');
+    g.innerHTML = '';
+    BG_CHOICES.forEach(c => {
+        const b = document.createElement('button');
+        b.className = 'pal-sw' + (c === state.bg ? ' on' : '');
+        b.style.background = c;
+        b.title = c;
+        b.addEventListener('click', () => setNotebookBg(c));
+        g.appendChild(b);
+    });
+    $('bg-custom').value = state.bg;
+    openModal('bg-modal');
+}
+function setNotebookBg(hex) {
+    if (state.kind !== 'nb') return;
+    state.bg = hex;
+    const dk = isDarkBg(hex);
+    // لو الخلفية غامقة نحوّل الحبر الغامق لأبيض عشان يبان، والعكس
+    state.quick.forEach(q => {
+        if (dk && lum(q.c) < 0.35) q.c = '#f8fafc';
+        if (!dk && lum(q.c) > 0.85) q.c = '#111827';
+    });
+    if (dk && lum(state.color) < 0.35) state.color = '#f8fafc';
+    if (!dk && lum(state.color) > 0.85) state.color = '#111827';
+    saveSettings();
+    closeModal('bg-modal');
+    renderPage(state.pageNo);
+    refreshToolbar();
+}
+$('tb-bg').addEventListener('click', openBgPicker);
+function setOrient(v, save = true) {
+    state.orient = v === 'vert' ? 'vert' : 'horiz';
+    $('toolbar').classList.toggle('vert', state.orient === 'vert');
+    document.body.classList.toggle('vert', state.orient === 'vert');
+    if (save) saveSettings();
+}
+$('tb-orient').addEventListener('click', () => setOrient(state.orient === 'vert' ? 'horiz' : 'vert'));
+$('bg-custom').addEventListener('change', e => setNotebookBg(e.target.value));
+
+// ---------- التنقل والحركة ----------
+function slidePage(dir) {
+    if (!pageEl.animate) return;
+    pageEl.animate([
+        { opacity: 0.25, transform: `translate(${dir * 60}px, ${panY}px) scale(${zoom})` },
+        { opacity: 1, transform: `translate(${panX}px, ${panY}px) scale(${zoom})` }
+    ], { duration: 240, easing: 'cubic-bezier(.2,.7,.2,1)' });
+}
+function navTo(n, dir) {
+    if (n < 1 || n > state.total) return;
+    goPage(n).then(() => slidePage(dir));
+}
+function finishSwipe() {
+    if (!pinch || zoom > 1.001) return;
+    const dx = pinch.m1.x - pinch.m0.x, dy = pinch.m1.y - pinch.m0.y;
+    if (Math.abs(dx) > 90 && Math.abs(dx) > 1.5 * Math.abs(dy)) {
+        // سحب لليمين = الصفحة اللي قبلها، سحب لليسار = اللي بعدها (زي الكتاب العربي)
+        if (dx < 0) navTo(state.pageNo + 1, -1);
+        else navTo(state.pageNo - 1, 1);
+    }
+}
+
+// ---------- الخرائط الذهنية (20 تصميم ملون) ----------
+const MM_COLS = ['#f87171', '#fb923c', '#fbbf24', '#34d399', '#38bdf8', '#818cf8', '#f472b6', '#a3e635'];
+function mmLayout(id) {
+    const n = [], l = [];
+    const nd = (t, x, y, w, h, c, sh, solid) => {
+        n.push({ t, x, y, w: w || 0.22, h: h || 0.085, c: c || MM_COLS[n.length % MM_COLS.length], sh: sh || 'r', solid: !!solid });
+        return n.length - 1;
+    };
+    const ln = (a, b) => l.push([a, b]);
+    const C = i => MM_COLS[i % MM_COLS.length];
+    const AR = 0.707; // نسبة الصفحة (عشان الدوائر تطلع دوائر)
+    const ring = (cx, cy, rx, cnt, start) => Array.from({ length: cnt }, (_, i) => {
+        const a = start + i * 2 * Math.PI / cnt;
+        return [cx + rx * Math.cos(a), cy + rx * AR * Math.sin(a)];
+    });
+    const k = parseInt(String(id).split('-')[1], 10);
+    switch (k) {
+        case 1: {
+            const c = nd('الفكرة الرئيسية', .5, .5, .34, .13, '#1e3a8a', 'o', true);
+            ring(.5, .5, .33, 6, -Math.PI / 2).forEach(([x, y], i) => ln(c, nd('فرع ' + (i + 1), x, y, .22, .09, C(i))));
+            break;
+        }
+        case 2: {
+            const c = nd('الموضوع', .5, .5, .3, .12, '#7c3aed', 'o', true);
+            ring(.5, .5, .36, 8, -Math.PI / 2).forEach(([x, y], i) => ln(c, nd('فكرة ' + (i + 1), x, y, .2, .08, C(i))));
+            break;
+        }
+        case 3: {
+            const r = nd('الموضوع', .5, .12, .3, .09, '#0f766e', 'r', true);
+            [.2, .5, .8].forEach((x, i) => {
+                const ch = nd('فكرة ' + (i + 1), x, .36, .24, .085, C(i));
+                ln(r, ch);
+                [x - .12, x + .12].forEach(gx => ln(ch, nd('تفصيل', gx, .6, .18, .075, C(i))));
+            });
+            break;
+        }
+        case 4: {
+            const r = nd('الموضوع', .2, .5, .26, .1, '#be185d', 'r', true);
+            [.2, .4, .6, .8].forEach((y, i) => {
+                const ch = nd('فرع ' + (i + 1), .5, y, .22, .085, C(i));
+                ln(r, ch);
+                ln(ch, nd('تفصيل', .82, y, .22, .07, C(i)));
+            });
+            break;
+        }
+        case 5: {
+            const r = nd('الموضوع', .5, .5, .26, .1, '#1e3a8a', 'r', true);
+            [.28, .5, .72].forEach((y, i) => {
+                const rc = nd('يمين ' + (i + 1), .74, y, .2, .085, C(i));
+                ln(r, rc); ln(rc, nd('تفصيل', .93, y, .12, .065, C(i)));
+                const lc = nd('يسار ' + (i + 1), .26, y, .2, .085, C(i + 3));
+                ln(r, lc); ln(lc, nd('تفصيل', .07, y, .12, .065, C(i + 3)));
+            });
+            break;
+        }
+        case 6: {
+            const r = nd('الإدارة', .5, .12, .3, .09, '#0369a1', 'r', true);
+            [.2, .5, .8].forEach((x, i) => {
+                const m = nd('قسم ' + (i + 1), x, .36, .26, .085, C(i));
+                ln(r, m);
+                [x - .12, x + .12].forEach(cx => ln(m, nd('موظف', cx, .62, .2, .08, C(i))));
+            });
+            break;
+        }
+        case 7: {
+            const h = nd('النتيجة', .84, .5, .24, .14, '#b91c1c', 'r', true);
+            [[.2, .2], [.45, .2], [.7, .2], [.2, .8], [.45, .8], [.7, .8]].forEach(([x, y], i) => ln(nd('سبب ' + (i + 1), x, y, .22, .085, C(i)), h));
+            break;
+        }
+        case 8: {
+            const pts = ring(.5, .5, .32, 6, -Math.PI / 2).map(([x, y], i) => nd('مرحلة ' + (i + 1), x, y, .22, .085, C(i)));
+            pts.forEach((a, i) => ln(a, pts[(i + 1) % pts.length]));
+            break;
+        }
+        case 9: {
+            [[.27, .3, 'نقاط القوة', '#34d399'], [.73, .3, 'نقاط الضعف', '#f87171'], [.27, .7, 'الفرص', '#38bdf8'], [.73, .7, 'التهديدات', '#fbbf24']]
+                .forEach(([x, y, t, c]) => nd(t, x, y, .4, .34, c));
+            break;
+        }
+        case 10: {
+            nd('العلاقات', .5, .12, .34, .08, '#334155', 'r', true);
+            nd('الفكرة أ', .36, .42, .42, .26, C(0), 'o');
+            nd('الفكرة ب', .64, .42, .42, .26, C(1), 'o');
+            nd('مشترك', .5, .6, .3, .18, C(2), 'o');
+            break;
+        }
+        case 11: {
+            [[.22, 'القمة', .2], [.4, 'المستوى ٣', .36], [.58, 'المستوى ٢', .52], [.76, 'القاعدة', .68]]
+                .forEach(([y, t, w], i) => nd(t, .5, y, w, .13, C(i + 2)));
+            break;
+        }
+        case 12: {
+            const c = nd('المحور', .5, .5, .3, .12, '#4338ca', 'r', true);
+            [[.2, .2], [.8, .2], [.2, .8], [.8, .8]].forEach(([x, y], i) => ln(c, nd('جانب ' + (i + 1), x, y, .24, .09, C(i))));
+            break;
+        }
+        case 13: {
+            const xs = [.12, .3, .5, .7, .88];
+            const ps = xs.map((x, i) => nd(['البداية', 'مرحلة ١', 'مرحلة ٢', 'مرحلة ٣', 'النهاية'][i], x, i % 2 ? .62 : .38, .18, .085, C(i)));
+            ps.forEach((a, i) => { if (i) ln(ps[i - 1], a); });
+            break;
+        }
+        case 14: {
+            const pos = [[.25, .18], [.75, .18], [.75, .4], [.25, .4], [.25, .62], [.75, .62]];
+            const ps = pos.map(([x, y], i) => nd('خطوة ' + (i + 1), x, y, .3, .085, C(i)));
+            ps.forEach((a, i) => { if (i) ln(ps[i - 1], a); });
+            break;
+        }
+        case 15: {
+            // الفقاعات: الدايرة ارتفاعها = عرضها × 0.707 عشان تطلع دايرة
+            [[.5, .5, .3, 'الموضوع', true], [.22, .24, .2, 'فكرة ١'], [.78, .22, .18, 'فكرة ٢'], [.2, .62, .17, 'فكرة ٣'],
+             [.8, .66, .2, 'فكرة ٤'], [.5, .86, .15, 'فكرة ٥'], [.5, .14, .14, 'فكرة ٦']]
+                .forEach(([x, y, w, t, solid], i) => nd(t, x, y, w, w * AR, solid ? '#0e7490' : C(i), 'c', solid));
+            break;
+        }
+        case 16: {
+            nd('الأولويات', .5, .1, .34, .08, '#334155', 'r', true);
+            [[.3, .36, 'مهم وعاجل'], [.7, .36, 'مهم غير عاجل'], [.3, .64, 'عاجل غير مهم'], [.7, .64, 'لا مهم ولا عاجل']]
+                .forEach(([x, y, t], i) => nd(t, x, y, .36, .2, C(i)));
+            break;
+        }
+        case 17: {
+            const c = nd('السؤال', .5, .5, .26, .14, '#7e22ce', 'o', true);
+            ['لماذا؟', 'كيف؟', 'متى؟', 'أين؟', 'من؟'].forEach((t, i, arr) => {
+                const [x, y] = ring(.5, .5, .34, arr.length, -Math.PI / 2)[i];
+                ln(c, nd(t, x, y, .2, .1, C(i), 'o'));
+            });
+            break;
+        }
+        case 18: {
+            const c = nd('المحور', .5, .5, .3, .13, '#b45309', 'o', true);
+            ring(.5, .5, .36, 5, -Math.PI / 2).forEach(([x, y], i) => ln(c, nd('نقطة ' + (i + 1), x, y, .2, .085, C(i))));
+            break;
+        }
+        case 19: {
+            [.2, .5, .8].forEach((x, i) => {
+                const h = nd('عنوان ' + (i + 1), x, .14, .26, .09, C(i), 'r', true);
+                [.34, .52, .7].forEach(y => ln(h, nd('فكرة', x, y, .26, .085, C(i + 1))));
+            });
+            break;
+        }
+        case 20: {
+            const c = nd('الموضوع', .5, .5, .32, .14, '#0f172a', 'o', true);
+            [[.18, .2], [.5, .14], [.82, .2], [.12, .42], [.88, .42], [.2, .7], [.8, .72], [.5, .86], [.3, .36], [.7, .6]]
+                .forEach(([x, y], i) => ln(c, nd('فكرة ' + (i + 1), x, y, .18, .07, C(i), 'o')));
+            break;
+        }
+        default:
+            nd('الفكرة الرئيسية', .5, .5, .34, .13, '#1e3a8a', 'o', true);
+    }
+    return { n, l };
+}
+function drawNode(ctx, nd, W, H, k, dk) {
+    const cx = nd.x * W, cy = nd.y * H, w = nd.w * W, h = nd.h * H;
+    ctx.save();
+    ctx.lineWidth = 2 * k;
+    ctx.strokeStyle = nd.c;
+    ctx.fillStyle = nd.solid ? nd.c : (dk ? shade(nd.c, -0.6) : shade(nd.c, 0.82));
+    ctx.beginPath();
+    if (nd.sh === 'o' || nd.sh === 'c') ctx.ellipse(cx, cy, w / 2, h / 2, 0, 0, Math.PI * 2);
+    else rrect(ctx, cx - w / 2, cy - h / 2, w, h, Math.min(h / 2, 14 * k));
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = nd.solid ? '#ffffff' : (dk ? '#f1f5f9' : '#0f172a');
+    ctx.font = (nd.solid ? 'bold ' : '') + Math.round(14 * k) + 'px Tahoma, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(nd.t, cx, cy);
+    ctx.restore();
+}
+function drawMindMap(ctx, id, W, H, k, dk) {
+    const lay = mmLayout(id);
+    lay.l.forEach(([a, b]) => {
+        const A = lay.n[a], B = lay.n[b];
+        const ax = A.x * W, ay = A.y * H, bx = B.x * W, by = B.y * H;
+        const mx = (ax + bx) / 2, my = (ay + by) / 2;
+        const dx = bx - ax, dy = by - ay;
+        const bend = 0.08;
+        ctx.save();
+        ctx.strokeStyle = B.c;
+        ctx.lineWidth = 2.4 * k;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.quadraticCurveTo(mx - dy * bend, my + dx * bend, bx, by);
+        ctx.stroke();
+        ctx.restore();
+    });
+    lay.n.forEach(nd => drawNode(ctx, nd, W, H, k, dk));
+}
+
+// ---------- رسم القوالب ----------
+function rrect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+}
+function drawTemplate(ctx, tpl, W, H, k, bg) {
+    const dk = isDarkBg(bg || '#ffffff');
+    ctx.save();
+    ctx.fillStyle = bg || '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.lineWidth = Math.max(1, k);
+    const stroke = (x1, y1, x2, y2, col) => {
+        ctx.strokeStyle = col;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    };
+    const line = (x1, y1, x2, y2, col) => stroke(x1, y1, x2, y2, dk ? 'rgba(255,255,255,0.22)' : col);
+    const node = (cx, cy, w, h, text, oval) => {
+        const x = cx * W - w * W / 2, y = cy * H - h * H / 2, pw = w * W, ph = h * H;
+        ctx.fillStyle = dk ? (oval ? '#064e3b' : '#1e293b') : (oval ? '#ecfdf5' : '#f0f9ff');
+        ctx.strokeStyle = oval ? '#10b981' : '#38bdf8';
+        ctx.lineWidth = 1.5 * k;
+        rrect(ctx, x, y, pw, ph, Math.min(ph / 2, 14 * k));
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = dk ? '#e2e8f0' : '#0c4a6e';
+        ctx.font = Math.round(15 * k) + 'px Tahoma, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, cx * W, cy * H);
+    };
+    const link = (ax, ay, bx, by) => stroke(ax * W, ay * H, bx * W, by * H, '#38bdf8');
+
+    if (tpl && tpl.startsWith('img:')) {
+        // الصورة بتتحط في النص وبتتحافظ على نسبتها
+        const im = templateImage(tpl.slice(4), () => { if (viewerOpen && state.kind === 'nb') renderPage(state.pageNo); });
+        if (im) {
+            const sc = Math.min(W / im.naturalWidth, H / im.naturalHeight);
+            const iw = im.naturalWidth * sc, ih = im.naturalHeight * sc;
+            ctx.drawImage(im, (W - iw) / 2, (H - ih) / 2, iw, ih);
+        }
+        ctx.restore();
+        return;
+    }
+    if (tpl && tpl.startsWith('mm-')) {
+        drawMindMap(ctx, tpl, W, H, k, dk);
+        ctx.restore();
+        return;
+    }
+    switch (tpl) {
+        case 'lines':
+            for (let y = 56 * k; y < H; y += 28 * k) line(0, y, W, y, '#cbd5e1');
+            break;
+        case 'wide':
+            for (let y = 70 * k; y < H; y += 44 * k) line(0, y, W, y, '#94a3b8');
+            break;
+        case 'grid':
+            for (let x = 24 * k; x < W; x += 24 * k) line(x, 0, x, H, '#e2e8f0');
+            for (let y = 24 * k; y < H; y += 24 * k) line(0, y, W, y, '#e2e8f0');
+            break;
+        case 'dots':
+            ctx.fillStyle = dk ? 'rgba(255,255,255,0.3)' : '#94a3b8';
+            for (let y = 24 * k; y < H; y += 24 * k) {
+                for (let x = 24 * k; x < W; x += 24 * k) {
+                    ctx.beginPath(); ctx.arc(x, y, 1.3 * k, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+            break;
+        case 'cornell': {
+            const mx = W * 0.3, top = H * 0.16, bottom = H * 0.82;
+            line(0, top, W, top, '#60a5fa');
+            line(mx, top, mx, bottom, '#60a5fa');
+            line(0, bottom, W, bottom, '#60a5fa');
+            for (let y = top + 28 * k; y < bottom; y += 28 * k) line(mx, y, W, y, '#cbd5e1');
+            break;
+        }
+        case 'onenote':
+            ctx.fillStyle = dk ? '#1e1b4b' : '#f5f3ff';
+            ctx.fillRect(0, 0, W, 64 * k);
+            line(W * 0.12, 0, W * 0.12, H, '#f87171');
+            for (let y = 90 * k; y < H; y += 26 * k) line(0, y, W, y, '#93c5fd');
+            break;
+        case 'mm-center':
+            node(0.5, 0.5, 0.32, 0.12, 'الفكرة الرئيسية');
+            [[0.2, 0.2], [0.8, 0.2], [0.12, 0.5], [0.88, 0.5], [0.2, 0.8], [0.8, 0.8]].forEach(([x, y], i) => {
+                link(0.5, 0.5, x, y);
+                node(x, y, 0.22, 0.09, 'فرع ' + (i + 1));
+            });
+            break;
+        case 'mm-tree':
+            node(0.5, 0.12, 0.3, 0.09, 'الموضوع');
+            [0.2, 0.5, 0.8].forEach((x, i) => {
+                link(0.5, 0.12, x, 0.38);
+                node(x, 0.38, 0.24, 0.08, 'فكرة ' + (i + 1));
+                [x - 0.12, x + 0.12].forEach(cx => {
+                    link(x, 0.38, cx, 0.66);
+                    node(cx, 0.66, 0.2, 0.07, 'تفصيل');
+                });
+            });
+            break;
+        case 'flow': {
+            const steps = [[0.15, 'بداية', true], [0.38, 'خطوة ١', false], [0.61, 'خطوة ٢', false], [0.84, 'نهاية', true]];
+            steps.forEach(([y, text, oval], i) => {
+                node(0.5, y, 0.42, 0.09, text, oval);
+                if (i < steps.length - 1) link(0.5, y + 0.045, 0.5, steps[i + 1][0] - 0.045);
+            });
+            break;
+        }
+        default:
+            break;
+    }
+    ctx.restore();
+}
+
+// صفحة الدفتر: تتبني من القالب بدل الـ PDF
+function renderNbPage(n) {
+    pageRatio = 1.414;
+    layoutPage();
+    let dpr = Math.min(2.5, (window.devicePixelRatio || 1) * 1.25);
+    if (cssW * dpr > 3000) dpr = 3000 / cssW;
+    const W = Math.round(cssW * dpr), H = Math.round(cssH * dpr);
+    [pdfc, hlc, annc].forEach(c => { c.width = W; c.height = H; });
+    const ctx = pdfc.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    drawTemplate(ctx, (state.tpls && state.tpls[n - 1]) || 'blank', W, H, W / cssW, state.bg || '#ffffff');
+    redrawLayers();
+}
+
+// ---------- الصفحة ----------
+function layoutPage() {
+    const sw = stage.clientWidth, sh = stage.clientHeight;
+    cssW = Math.max(120, Math.min(sw - 24, (sh - 24) / pageRatio));
+    cssH = cssW * pageRatio;
+    pageEl.style.width = cssW + 'px';
+    pageEl.style.height = cssH + 'px';
+    pageEl.style.left = ((sw - cssW) / 2) + 'px';
+    pageEl.style.top = ((sh - cssH) / 2) + 'px';
+    applyTransform();
+}
+
+async function renderPage(n) {
+    const tok = ++renderToken;
+    if (state.kind === 'nb') { renderNbPage(n); return; }
+    const page = await state.doc.getPage(n);
+    if (tok !== renderToken) return;
+    const vp1 = page.getViewport({ scale: 1 });
+    pageRatio = vp1.height / vp1.width;
+    layoutPage();
+    let dpr = Math.min(2.5, (window.devicePixelRatio || 1) * 1.25);
+    if (cssW * dpr > 3000) dpr = 3000 / cssW;
+    const s = (cssW * dpr) / vp1.width;
+    const vp = page.getViewport({ scale: s });
+    [pdfc, hlc, annc].forEach(c => { c.width = Math.round(vp.width); c.height = Math.round(vp.height); });
+    await page.render({ canvasContext: pdfc.getContext('2d'), viewport: vp }).promise;
+    if (tok !== renderToken) return;
+    redrawLayers();
+}
+
+async function goPage(n) {
+    n = Math.min(state.total, Math.max(1, n));
+    state.pageNo = n;
+    state.cur = null;
+    zoom = 1; panX = 0; panY = 0;
+    refreshToolbar();
+    await renderPage(n);
+}
+
+// ---------- التراجع والإعادة والمسح ----------
+function undo() {
+    const e = state.undo.pop();
+    if (!e) return;
+    state.redo.push({ n: e.n, data: snapshotPage(e.n) });
+    state.pages[e.n] = JSON.parse(e.data);
+    bumpCache();
+    redrawLayers();
+    refreshToolbar();
+}
+function redo() {
+    const e = state.redo.pop();
+    if (!e) return;
+    state.undo.push({ n: e.n, data: snapshotPage(e.n) });
+    state.pages[e.n] = JSON.parse(e.data);
+    bumpCache();
+    redrawLayers();
+    refreshToolbar();
+}
+function clearPage() {
+    if (!(state.pages[state.pageNo] || []).length) return;
+    showDialog('مسح الصفحة', 'هيتمسح كل اللي كتبته في الصفحة دي. متأكد؟', [
+        { label: 'إلغاء' },
+        { label: 'مسح', cls: 'danger', fn: () => {
+            pushUndo(snapshotPage(state.pageNo));
+            state.pages[state.pageNo] = [];
+            bumpCache();
+            redrawLayers();
+            refreshToolbar();
+        } }
+    ]);
+}
+
+// ---------- الحفظ والإغلاق ----------
+function saveNow() {
+    const data = state.kind === 'nb'
+        ? { name: state.name, kind: 'nb', title: state.title, tpls: state.tpls, bg: state.bg, pages: cleanPages() }
+        : { name: state.name, pages: cleanPages() };
+    A('saveAnnotations', state.name, JSON.stringify(data));
+    state.saved = snapshotDoc();
+    toast('تم حفظ الكتابة');
+    refreshToolbar();
+}
+
+function askClose() {
+    if (!isDirty()) { closeViewer(); return; }
+    showDialog('حفظ الكتابة؟', 'في كتابة جديدة على الملف. تحب تحفظها قبل ما تقفل؟', [
+        { label: 'إلغاء' },
+        { label: 'لا، بدون حفظ', cls: 'danger', fn: () => closeViewer() },
+        { label: 'حفظ', cls: 'primary', fn: () => { saveNow(); closeViewer(); } }
+    ]);
+}
+
+function closeViewer() {
+    viewerOpen = false;
+    ptrs.clear();
+    mode = null;
+    state.cur = null;
+    if (state.doc && state.doc.destroy) state.doc.destroy();
+    state.doc = null;
+    $('viewer').classList.add('hidden');
+    $('library').classList.remove('hidden');
+    loadLibrary();
+}
+
+// زرار الرجوع من الأندرويد: true يعني اتعامل معاه، false يعني اقفل التطبيق
+window.handleBack = function () {
+    if (!viewerOpen) return false;
+    if ($('dialog').classList.contains('open')) { closeModal('dialog'); return true; }
+    if ($('pens-modal').classList.contains('open') || $('pal-modal').classList.contains('open')) {
+        closeModal('pens-modal'); closeModal('pal-modal'); return true;
+    }
+    askClose();
+    return true;
+};
+
+// ---------- فتح ملف ----------
+async function openPdf(name) {
+    state.name = name;
+    state.kind = 'pdf';
+    state.tpls = null;
+    bumpCache();
+    let saved = {};
+    try { saved = JSON.parse(A('loadAnnotations', name) || '{}'); } catch (e) { saved = {}; }
+    state.pages = saved.pages || {};
+    state.undo = []; state.redo = []; state.cur = null;
+    state.saved = snapshotDoc();
+    state.pageNo = 1;
+    $('library').classList.add('hidden');
+    $('viewer').classList.remove('hidden');
+    viewerOpen = true;
+    try {
+        if (!window.pdfjsLib) throw new Error('مكتبة PDF ما اتحمّلتش. اتأكد إن الإنترنت شغال وافتح التطبيق تاني.');
+        state.doc = await pdfjsLib.getDocument({
+            url: 'https://appassets.androidplatform.net/pdfs/' + encodeURIComponent(name),
+            disableRange: true, disableStream: true
+        }).promise;
+    } catch (e) {
+        showDialog('تعذر فتح الملف', String((e && e.message) || e), [{ label: 'حسناً' }]);
+        closeViewer();
+        return;
+    }
+    state.total = state.doc.numPages;
+    zoom = 1; panX = 0; panY = 0;
+    barHidden = false;
+    $('toolbar').classList.remove('bar-hidden');
+    await goPage(1);
+}
+
+// ---------- الدفاتر ----------
+async function openNotebook(id) {
+    let saved = {};
+    try { saved = JSON.parse(A('loadAnnotations', id) || '{}'); } catch (e) { saved = {}; }
+    state.kind = 'nb';
+    state.name = id;
+    state.title = saved.title || 'دفتر';
+    state.tpls = (saved.tpls && saved.tpls.length) ? saved.tpls : ['blank'];
+    state.bg = saved.bg || '#ffffff';
+    state.pages = saved.pages || {};
+    state.total = state.tpls.length;
+    state.doc = null;
+    state.undo = []; state.redo = []; state.cur = null;
+    state.saved = snapshotDoc();
+    state.pageNo = 1;
+    bumpCache();
+    $('library').classList.add('hidden');
+    $('viewer').classList.remove('hidden');
+    viewerOpen = true;
+    zoom = 1; panX = 0; panY = 0;
+    $('toolbar').classList.remove('bar-hidden');
+    barHidden = false;
+    await goPage(1);
+}
+function notebookCount() {
+    try { return JSON.parse(A('listNotebooks') || '[]').length; } catch (e) { return 0; }
+}
+async function newNotebook(tpl) {
+    const id = 'nb_' + Date.now().toString(36);
+    const data = { name: id, kind: 'nb', title: 'دفتر ' + (notebookCount() + 1), tpls: [tpl], bg: '#ffffff', pages: {} };
+    A('saveAnnotations', id, JSON.stringify(data));
+    await openNotebook(id);
+}
+function setPageTemplate(id) {
+    if (state.kind !== 'nb') return;
+    state.tpls[state.pageNo - 1] = id;
+    bumpCache();
+    renderPage(state.pageNo);
+    refreshToolbar();
+}
+function addNbPage() {
+    if (state.kind !== 'nb') return;
+    state.tpls.push(state.tpls[state.pageNo - 1] || 'blank');
+    state.total = state.tpls.length;
+    goPage(state.total).then(() => slidePage(-1));
+    toast('تمت إضافة صفحة');
+}
+let nbPickMode = 'new';
+function openNbPicker(mode) {
+    nbPickMode = mode;
+    const g = $('nb-grid');
+    g.innerHTML = '';
+    [...TEMPLATES.map(([id, label]) => ({ id, label })), ...REMOTE_TEMPLATES].forEach(({ id, label }) => {
+        const b = document.createElement('button');
+        b.className = 'tpl-card';
+        const cv = document.createElement('canvas');
+        cv.width = 120; cv.height = 170;
+        drawTemplate(cv.getContext('2d'), id, 120, 170, 0.6, '#ffffff');
+        const sp = document.createElement('span');
+        sp.textContent = label;
+        b.appendChild(cv);
+        b.appendChild(sp);
+        b.addEventListener('click', () => {
+            closeModal('nb-modal');
+            if (nbPickMode === 'new') newNotebook(id); else setPageTemplate(id);
+        });
+        g.appendChild(b);
+    });
+    $('nb-title').textContent = mode === 'new' ? 'دفتر جديد: اختار القالب' : 'قالب الصفحة';
+    openModal('nb-modal');
+}
+$('add-nb').addEventListener('click', () => openNbPicker('new'));
+$('tb-tpl').addEventListener('click', () => openNbPicker('page'));
+$('tb-addpage').addEventListener('click', addNbPage);
+
+// ---------- المكتبة ----------
+function loadLibrary() {
+    const g = $('lib-grid');
+    g.innerHTML = '';
+    let names = [], notes = [];
+    try { names = JSON.parse(A('listPdfs') || '[]'); } catch (e) { names = []; }
+    try { notes = JSON.parse(A('listNotebooks') || '[]'); } catch (e) { notes = []; }
+    $('lib-empty').classList.toggle('hidden', names.length + notes.length > 0);
+    const addCard = (title, onOpen, onDelete, icon) => {
+        const card = document.createElement('div');
+        card.className = 'lib-card';
+        card.innerHTML = '<div class="lib-ico">' + svg(icon) + '</div><div class="lib-name"></div><button class="lib-del" title="حذف">' + svg('x') + '</button>';
+        card.querySelector('.lib-name').textContent = title;
+        card.addEventListener('click', e => {
+            if (e.target.closest('.lib-del')) return;
+            onOpen();
+        });
+        card.querySelector('.lib-del').addEventListener('click', e => {
+            e.stopPropagation();
+            showDialog('حذف', 'هيتحذف "' + title + '" وكتابتك عليه. متأكد؟', [
+                { label: 'إلغاء' },
+                { label: 'حذف', cls: 'danger', fn: onDelete }
+            ]);
+        });
+        g.appendChild(card);
+    };
+    notes.forEach(id => {
+        let title = 'دفتر';
+        try { title = JSON.parse(A('loadAnnotations', id) || '{}').title || title; } catch (e) {}
+        addCard(title, () => openNotebook(id), () => { if (A('deleteNotebook', id)) loadLibrary(); }, 'file');
+    });
+    names.forEach(n => {
+        addCard(n.replace(/\.pdf$/i, ''), () => openPdf(n), () => { if (A('deletePdf', n)) loadLibrary(); }, 'file');
+    });
+}
+$('add-btn').addEventListener('click', () => A('pickPdf'));
+window.onPdfAdded = () => { if (!viewerOpen) { loadLibrary(); toast('تمت إضافة الملف'); } };
+window.onPdfError = () => toast('تعذر إضافة الملف');
+
+// ---------- الشريط ----------
+function refreshToolbar() {
+    $('tb-pen').classList.toggle('on', state.tool === 'pen');
+    $('tb-eraser').classList.toggle('on', state.tool === 'erase');
+    $('tb-shape').classList.toggle('on', state.tool === 'shape');
+    $('tb-tpl').classList.toggle('hidden', state.kind !== 'nb');
+    $('tb-addpage').classList.toggle('hidden', state.kind !== 'nb');
+    $('tb-bg').classList.toggle('hidden', state.kind !== 'nb');
+    refreshQuick();
+    refreshGrid();
+    $('tb-erasemode').textContent = state.eraseMode === 'whole' ? 'مسح كامل' : 'مسح جزئي';
+    $('tb-hand').classList.toggle('on', state.fingerDraw);
+    $('tb-undo').disabled = !state.undo.length;
+    $('tb-redo').disabled = !state.redo.length;
+    $('tb-penname').textContent = PENS[state.penId].n;
+    $('color-dot').style.background = state.color;
+    $('tb-size').value = state.size;
+    $('tb-page').textContent = state.pageNo + ' / ' + (state.total || 0);
+    $('nav-prev').disabled = state.pageNo <= 1;
+    $('nav-next').disabled = state.pageNo >= state.total;
+    $('toggle-btn').querySelector('span').innerHTML = svg(barHidden ? 'eyeOff' : 'eye');
+}
+
+$('tb-undo').addEventListener('click', undo);
+$('tb-redo').addEventListener('click', redo);
+$('tb-pen').addEventListener('click', () => { pensSlot = null; state.tool = 'pen'; buildPens(); openModal('pens-modal'); refreshToolbar(); });
+$('tb-color').addEventListener('click', () => { paletteSlot = null; buildPalette(); openModal('pal-modal'); });
+$('tb-size').addEventListener('input', e => {
+    state.size = +e.target.value;
+    const q = state.quick.find(x => x.p === state.penId && x.c === state.color);
+    if (q) q.s = state.size;
+});
+$('tb-size').addEventListener('change', saveSettings);
+$('tb-shape').addEventListener('click', () => openModal('shape-modal'));
+function pickShape(kind) {
+    closeModal('shape-modal');
+    state.shapeKind = kind;
+    state.tool = 'shape';
+    refreshToolbar();
+}
+$('tb-eraser').addEventListener('click', () => { state.tool = state.tool === 'erase' ? 'pen' : 'erase'; refreshToolbar(); });
+$('tb-erasemode').addEventListener('click', () => { state.eraseMode = state.eraseMode === 'partial' ? 'whole' : 'partial'; refreshToolbar(); });
+$('tb-hand').addEventListener('click', () => {
+    state.fingerDraw = !state.fingerDraw;
+    toast(state.fingerDraw ? 'الإصبع بيرسم' : 'الإصبع بيتحرك بالصفحة');
+    refreshToolbar();
+});
+$('tb-zin').addEventListener('click', () => zoomBy(1.25));
+$('tb-zout').addEventListener('click', () => zoomBy(0.8));
+$('tb-clear').addEventListener('click', clearPage);
+$('tb-save').addEventListener('click', saveNow);
+$('nav-prev').addEventListener('click', () => navTo(state.pageNo - 1, 1));
+$('nav-next').addEventListener('click', () => navTo(state.pageNo + 1, -1));
+$('close-btn').addEventListener('click', askClose);
+$('toggle-btn').addEventListener('click', () => {
+    barHidden = !barHidden;
+    $('toolbar').classList.toggle('bar-hidden', barHidden);
+    refreshToolbar();
+});
+
+function buildPens() {
+    const g = $('pens-grid');
+    g.innerHTML = '';
+    PENS.forEach((pen, i) => {
+        const b = document.createElement('button');
+        b.className = 'pen-card' + (i === state.penId ? ' on' : '');
+        const cv = document.createElement('canvas');
+        cv.width = 180; cv.height = 44;
+        const pts = [];
+        for (let k = 0; k <= 20; k++) pts.push([0.06 + 0.88 * k / 20, 0.5 + 0.26 * Math.sin(k / 20 * Math.PI * 2)]);
+        drawStroke(cv.getContext('2d'), { p: i, c: state.color, w: 0.02, s: 7, pts }, 180, 44);
+        const label = document.createElement('span');
+        label.textContent = pen.n;
+        b.appendChild(cv);
+        b.appendChild(label);
+        b.addEventListener('click', () => {
+            if (pensSlot !== null) {
+                state.quick[pensSlot].p = i;
+                pensSlot = null;
+                saveSettings();
+                closeModal('pens-modal');
+                refreshToolbar();
+                return;
+            }
+            state.penId = i;
+            state.tool = 'pen';
+            closeModal('pens-modal');
+            refreshToolbar();
+        });
+        g.appendChild(b);
+    });
+}
+
+function buildPalette() {
+    const g = $('pal-grid');
+    g.innerHTML = '';
+    PALETTE.forEach(c => {
+        const b = document.createElement('button');
+        b.className = 'pal-sw' + (c.toLowerCase() === state.color.toLowerCase() ? ' on' : '');
+        b.style.background = c;
+        b.title = c;
+        b.addEventListener('click', () => pickColor(c));
+        g.appendChild(b);
+    });
+    $('pal-custom').value = state.color;
+}
+function pickColor(c) {
+    if (paletteSlot !== null) {
+        const q = state.quick[paletteSlot];
+        q.c = c;
+        if (state.penId === q.p && state.tool === 'pen') state.color = c;
+        paletteSlot = null;
+        saveSettings();
+    } else {
+        state.color = c;
+    }
+    closeModal('pal-modal');
+    refreshToolbar();
+}
+$('pal-custom').addEventListener('change', e => pickColor(e.target.value));
+
+// تغيير حجم الشاشة يعيد ترتيب الصفحة ويرسمها بالحجم الجديد
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+    if (!viewerOpen || !state.doc) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => renderPage(state.pageNo), 250);
+});
+
+if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+try {
+    const st = JSON.parse(A('loadAnnotations', 'app_settings') || '{}');
+    if (Array.isArray(st.quick) && st.quick.length === 5) state.quick = st.quick;
+    if (st.orient === 'vert') setOrient('vert', false);
+} catch (e) { /* الإعدادات الافتراضية */ }
+buildColorGrid();
+document.querySelectorAll('.szd').forEach(b => b.addEventListener('click', () => setSize(+b.dataset.s)));
+loadContentTemplates();
+loadLibrary();
+refreshToolbar();
+</script>
+</body>
+</html>
